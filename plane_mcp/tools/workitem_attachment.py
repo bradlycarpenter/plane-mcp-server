@@ -27,7 +27,7 @@ from plane_mcp.attachments import (
     attachment_to_dict,
     fetch_validated_get,
 )
-from plane_mcp.client import get_plane_client_context
+from plane_mcp.client import get_plane_client_context, is_local
 from plane_mcp.toolkit import Action, build_annotations, build_description, missing, needs
 
 NAME = "workitem_attachment"
@@ -43,6 +43,7 @@ ACTIONS = (
     ),
     Action("download_url", ("project_id", "workitem_id", "attachment_id"), read=True),
     Action("upload_from_url", ("project_id", "workitem_id", "url"), ("name",), open_world=True),
+    Action("upload_from_path", ("project_id", "workitem_id", "path"), ("name",), note="a file on this machine"),
     Action("delete", ("project_id", "workitem_id", "attachment_id"), destructive=True),
 )
 
@@ -50,7 +51,8 @@ FOOTER = (
     f"read supports PNG/JPEG/GIF/WEBP up to {IMAGE_READ_LIMIT // 1024 // 1024} MB and "
     f"TXT/MD/CSV/HTML/XML/YAML/JSON up to {TEXT_READ_LIMIT // 1024 // 1024} MB. "
     "Get attachment_id from the list action. upload_from_url fetches the file server-side, so "
-    "the URL must be reachable without authentication and must not resolve to a private address."
+    "the URL must be reachable without authentication and must not resolve to a private address. "
+    "upload_from_path takes an absolute path and works only over stdio; HTML is stored as text/plain."
 )
 
 LEGACY = {
@@ -144,8 +146,36 @@ def _upload(client, workspace_slug: str, project_id: str, workitem_id: str, url:
     filename = name or os.path.basename(urlparse(url).path.rstrip("/")) or "attachment"
     raw_type = response.headers.get("Content-Type", "")
     content_type = raw_type.split(";")[0].strip() if raw_type else ""
+    return _store(client, workspace_slug, project_id, workitem_id, payload, filename, content_type)
+
+
+def _upload_path(client, workspace_slug: str, project_id: str, workitem_id: str, path: str, name: str):
+    if not is_local():
+        return "Error: upload_from_path reads this server's own disk, so it works only over stdio. Use upload_from_url."
+    if not os.path.isabs(path):
+        return f"Error: path must be absolute, got {path!r}."
+    if not os.path.isfile(path):
+        return f"Error: no file at {path!r}."
+    size = os.path.getsize(path)
+    if size == 0:
+        return f"Error: {path!r} is empty."
+    if size > UPLOAD_SIZE_LIMIT:
+        return (
+            f"Error: {path!r} is {size / 1024 / 1024:.1f} MB. Maximum allowed size is "
+            f"{UPLOAD_SIZE_LIMIT // 1024 // 1024} MB."
+        )
+    with open(path, "rb") as handle:
+        payload = handle.read(UPLOAD_SIZE_LIMIT + 1)
+    return _store(client, workspace_slug, project_id, workitem_id, payload, name or os.path.basename(path), "")
+
+
+def _store(client, workspace_slug, project_id, workitem_id, payload: bytes, filename: str, content_type: str):
     if not content_type or content_type == "application/octet-stream":
         content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    # Plane refuses text/html outright, and served as HTML from the asset store
+    # it would run script on that origin. Text keeps it readable and inert.
+    if content_type in ("text/html", "application/xhtml+xml"):
+        content_type = "text/plain"
 
     try:
         attachment = client.work_items.attachments.upload_from_bytes(
@@ -168,11 +198,12 @@ def register(mcp: FastMCP) -> None:
         annotations=build_annotations(TITLE, ACTIONS),
     )
     def workitem_attachment(
-        action: Literal["list", "read", "download_url", "upload_from_url", "delete"],
+        action: Literal["list", "read", "download_url", "upload_from_url", "upload_from_path", "delete"],
         project_id: str = "",
         workitem_id: str = "",
         attachment_id: str = "",
         url: str = "",
+        path: str = "",
         name: str = "",
     ) -> Image | list[dict[str, Any]] | dict[str, Any] | str | None:
         client, workspace_slug = get_plane_client_context()
@@ -190,6 +221,11 @@ def register(mcp: FastMCP) -> None:
             if not url:
                 return missing(action, "url")
             return _upload(client, workspace_slug, project_id, workitem_id, url, name)
+
+        if action == "upload_from_path":
+            if not path:
+                return missing(action, "path")
+            return _upload_path(client, workspace_slug, project_id, workitem_id, path, name)
 
         if not attachment_id:
             return missing(action, "attachment_id")

@@ -1,6 +1,6 @@
 # The tool surface
 
-**13 tools**, one per Plane resource, each taking an `action` parameter that selects the operation. 73 actions in total. Only resources Plane Community Edition supports are exposed.
+**14 tools**, one per Plane resource plus `agent`, each taking an `action` parameter that selects the operation. 79 actions in total. Only resources Plane Community Edition supports are exposed.
 
 ```python
 workitem(action="create", project_id=..., name="Fix login")
@@ -8,7 +8,7 @@ workitem(action="list", project_id=...)
 cycle(action="archive", project_id=..., cycle_id=...)
 ```
 
-A compact catalogue — 13 tools, ~24k characters — loads fully in every MCP client and leaves the context budget to the conversation.
+A compact catalogue — 14 tools, ~25k characters — loads fully in every MCP client and leaves the context budget to the conversation.
 
 Five parts, in this order:
 
@@ -91,10 +91,11 @@ Names for resources and actions this Community Edition fork removed no longer re
 | `state` | `list` · `retrieve` · `create` · `update` · `delete` |
 | `workitem` | `list` · `retrieve` · `retrieve_by_identifier` · `search` · `create` · `update` · `delete` · `manage_assignee` · `manage_label` |
 | `workitem_activity` | `list` · `retrieve` |
-| `workitem_attachment` | `list` · `read` · `download_url` · `upload_from_url` · `delete` |
+| `workitem_attachment` | `list` · `read` · `download_url` · `upload_from_url` · `upload_from_path` · `delete` |
 | `workitem_comment` | `list` · `retrieve` · `create` · `update` · `delete` |
 | `workitem_link` | `list` · `retrieve` · `create` · `update` · `delete` |
 | `workitem_relation` | `list` · `create` |
+| `agent` | `link` · `create_and_link` · `unlink` · `status` · `ask` |
 
 Every tool's own description lists its actions with their required and optional
 parameters; that description is generated from `ACTIONS` and is the authoritative
@@ -121,4 +122,5 @@ caught here rather than at runtime.
 | `test_vocabulary.py` | `workitem` everywhere a model reads; `work_item` preserved in SDK calls and retired names |
 | `test_references.py` | Every backticked `tool action` in a description, and in the server instructions resolves |
 | `test_state.py` | Triage can be neither created nor flagged; project-state fields reach the SDK |
-| `test_attachments.py` | The image-versus-text return channel, size limits, and the SSRF guard |
+| `test_attachments.py` | The image-versus-text return channel, size limits, the SSRF guard, and local-path uploads |
+| `test_agent.py` | `agent` links by hc labels only, leaves `plane.session` to the bridge, and `ask` flags the item `needs-you` |

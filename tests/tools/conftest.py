@@ -81,3 +81,36 @@ def registered_with_aliases():
     mcp = FastMCP("aliases")
     register_v2(mcp)
     return {name: _run(mcp.get_tool(name)) for name in alias_table()}
+
+
+class FakeHC:
+    """Stands in for the hc CLI: a terminal's labels, and every command run."""
+
+    def __init__(self, labels: dict[str, str] | None = None) -> None:
+        self.labels = dict(labels or {})
+        self.commands: list[tuple[str, ...]] = []
+
+    def __call__(self, *args: str):
+        self.commands.append(args)
+        if args[0] == "get":
+            return {"address": args[1], "labels": dict(self.labels)}
+        if args[0] == "label":
+            for pair in args[2:]:
+                key, _, value = pair.partition("=")
+                if value:
+                    self.labels[key] = value
+                else:
+                    self.labels.pop(key, None)
+            return None
+        raise AssertionError(f"unexpected hc command: {args}")
+
+
+@pytest.fixture(autouse=True)
+def hc(monkeypatch):
+    """Every test gets a fake hc, linked to ENG-1, so no test can relabel the terminal running the suite."""
+    from plane_mcp.tools import agent
+
+    fake = FakeHC({"plane.issue": "w", "plane.ref": "ENG-1", "plane.project": "p"})
+    monkeypatch.setattr(agent, "_hc", fake)
+    monkeypatch.setenv("HC_TERMINAL_ID", "t9")
+    return fake

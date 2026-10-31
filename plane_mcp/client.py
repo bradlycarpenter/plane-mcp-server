@@ -32,6 +32,16 @@ def _connected_via(token: AccessToken | None) -> str:
     return "environment"
 
 
+def is_local() -> bool:
+    """Whether the caller shares this machine: the stdio transport, which carries no token.
+
+    Over HTTP the server's filesystem and terminal belong to the host, not to
+    whoever is calling, so anything that reads a local path or labels the
+    server's own terminal must refuse there.
+    """
+    return get_access_token() is None
+
+
 def current_workspace() -> dict[str, Any]:
     """The workspace this connection is bound to, as far as its credentials say."""
     token = get_access_token()

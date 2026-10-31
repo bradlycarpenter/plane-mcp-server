@@ -17,6 +17,7 @@ from __future__ import annotations
 from types import ModuleType
 
 from plane_mcp.tools import (
+    agent,
     cycle,
     intake,
     label,
@@ -46,6 +47,7 @@ RESOURCES: tuple[ModuleType, ...] = (
     workitem_comment,
     workitem_link,
     workitem_relation,
+    agent,
 )
 
 

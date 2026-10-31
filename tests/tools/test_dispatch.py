@@ -46,7 +46,8 @@ CONDITIONAL: dict[tuple[str, str], dict[str, object]] = {
 }
 
 # Actions whose guard clause legitimately answers without calling the SDK.
-NO_CALL_EXPECTED: set[tuple[str, str]] = set()
+# The agent tool answers these from hc labels alone.
+NO_CALL_EXPECTED: set[tuple[str, str]] = {("agent", "unlink"), ("agent", "status")}
 
 # Actions that need populated remote state or an outbound HTTP fetch to get past
 # their own preconditions. Covered by tests/tools/test_attachments.py.
@@ -54,6 +55,7 @@ NEEDS_FIXTURE: set[tuple[str, str]] = {
     ("workitem_attachment", "read"),
     ("workitem_attachment", "download_url"),
     ("workitem_attachment", "upload_from_url"),
+    ("workitem_attachment", "upload_from_path"),
 }
 
 

@@ -551,3 +551,78 @@ def test_upload_from_url_preserves_matrix_params_in_the_request_path(attachment_
     )
 
     assert captured_paths == ["/file.png;v=2?sig=x"]
+
+
+def _upload_path(tool, path, **extra):
+    return tool(action="upload_from_path", project_id=PROJECT, workitem_id=WORK_ITEM, path=str(path), **extra)
+
+
+def test_upload_from_path_sends_the_files_bytes(attachment_tool, monkeypatch, tmp_path):
+    tool, spy, _ = attachment_tool
+    monkeypatch.setattr(module, "attachment_to_dict", lambda attachment, slug: {"id": ATTACHMENT})
+    (tmp_path / "design.png").write_bytes(PNG)
+
+    result = _upload_path(tool, tmp_path / "design.png")
+
+    upload = spy.recorder.only()
+    assert upload.method == "work_items.attachments.upload_from_bytes"
+    assert (upload.kwargs["file_bytes"], upload.kwargs["name"], upload.kwargs["content_type"]) == (
+        PNG,
+        "design.png",
+        "image/png",
+    )
+    assert result == {"id": ATTACHMENT}
+
+
+def test_upload_from_path_stores_html_as_text(attachment_tool, monkeypatch, tmp_path):
+    """Plane refuses text/html, and serving it as HTML would run its script on the asset origin."""
+    tool, spy, _ = attachment_tool
+    monkeypatch.setattr(module, "attachment_to_dict", lambda attachment, slug: {"id": ATTACHMENT})
+    (tmp_path / "design.html").write_text("<html><body>hi</body></html>")
+
+    _upload_path(tool, tmp_path / "design.html", name="mock.html")
+
+    upload = spy.recorder.only()
+    assert (upload.kwargs["name"], upload.kwargs["content_type"]) == ("mock.html", "text/plain")
+
+
+@pytest.mark.parametrize(
+    ("make", "expected"),
+    [
+        (lambda tmp: "design.png", "absolute"),
+        (lambda tmp: tmp / "missing.png", "no file"),
+        (lambda tmp: tmp, "no file"),
+        (lambda tmp: (tmp / "empty.png").touch() or tmp / "empty.png", "empty"),
+    ],
+    ids=["relative", "missing", "directory", "empty"],
+)
+def test_upload_from_path_refuses_what_it_cannot_send(attachment_tool, tmp_path, make, expected):
+    tool, spy, _ = attachment_tool
+
+    result = _upload_path(tool, make(tmp_path))
+
+    assert result.startswith("Error:") and expected in result, result
+    assert not spy.recorder.calls
+
+
+def test_upload_from_path_refuses_a_file_over_the_limit(attachment_tool, monkeypatch, tmp_path):
+    tool, spy, _ = attachment_tool
+    monkeypatch.setattr(module, "UPLOAD_SIZE_LIMIT", 8)
+    (tmp_path / "big.png").write_bytes(PNG)
+
+    result = _upload_path(tool, tmp_path / "big.png")
+
+    assert result.startswith("Error:") and "Maximum allowed size" in result
+    assert not spy.recorder.calls
+
+
+def test_upload_from_path_is_refused_over_http(attachment_tool, monkeypatch, tmp_path):
+    """Over HTTP the path names a file on the server's disk, not the caller's."""
+    tool, spy, _ = attachment_tool
+    monkeypatch.setattr(module, "is_local", lambda: False)
+    (tmp_path / "design.png").write_bytes(PNG)
+
+    result = _upload_path(tool, tmp_path / "design.png")
+
+    assert result.startswith("Error:") and "stdio" in result
+    assert not spy.recorder.calls
