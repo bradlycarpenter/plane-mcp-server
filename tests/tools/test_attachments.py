@@ -574,8 +574,8 @@ def test_upload_from_path_sends_the_files_bytes(attachment_tool, monkeypatch, tm
     assert result == {"id": ATTACHMENT}
 
 
-def test_upload_from_path_stores_html_as_text(attachment_tool, monkeypatch, tmp_path):
-    """Plane refuses text/html, and serving it as HTML would run its script on the asset origin."""
+def test_upload_from_path_sends_html_as_html(attachment_tool, monkeypatch, tmp_path):
+    """The Agent panel renders design.html from its stored type, so it must arrive as text/html."""
     tool, spy, _ = attachment_tool
     monkeypatch.setattr(module, "attachment_to_dict", lambda attachment, slug: {"id": ATTACHMENT})
     (tmp_path / "design.html").write_text("<html><body>hi</body></html>")
@@ -583,7 +583,7 @@ def test_upload_from_path_stores_html_as_text(attachment_tool, monkeypatch, tmp_
     _upload_path(tool, tmp_path / "design.html", name="mock.html")
 
     upload = spy.recorder.only()
-    assert (upload.kwargs["name"], upload.kwargs["content_type"]) == ("mock.html", "text/plain")
+    assert (upload.kwargs["name"], upload.kwargs["content_type"]) == ("mock.html", "text/html")
 
 
 @pytest.mark.parametrize(

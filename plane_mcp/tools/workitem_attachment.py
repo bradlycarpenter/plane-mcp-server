@@ -52,7 +52,7 @@ FOOTER = (
     f"TXT/MD/CSV/HTML/XML/YAML/JSON up to {TEXT_READ_LIMIT // 1024 // 1024} MB. "
     "Get attachment_id from the list action. upload_from_url fetches the file server-side, so "
     "the URL must be reachable without authentication and must not resolve to a private address. "
-    "upload_from_path takes an absolute path and works only over stdio; HTML is stored as text/plain."
+    "upload_from_path takes an absolute path and works only over stdio."
 )
 
 LEGACY = {
@@ -172,10 +172,6 @@ def _upload_path(client, workspace_slug: str, project_id: str, workitem_id: str,
 def _store(client, workspace_slug, project_id, workitem_id, payload: bytes, filename: str, content_type: str):
     if not content_type or content_type == "application/octet-stream":
         content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-    # Plane refuses text/html outright, and served as HTML from the asset store
-    # it would run script on that origin. Text keeps it readable and inert.
-    if content_type in ("text/html", "application/xhtml+xml"):
-        content_type = "text/plain"
 
     try:
         attachment = client.work_items.attachments.upload_from_bytes(
