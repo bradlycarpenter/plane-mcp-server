@@ -14,8 +14,7 @@ The modules split by *when* they act:
     spec        declaration time -- describe a resource's actions
     runtime     call time -- validate parameters, shape SDK payloads
     mentions    call time -- render `@[uuid]` into Plane's mention markup, and back
-    paging      response time -- Plane's pagination envelope and PQL failures
-    governance  refusal time -- recognise a workspace-owned resource, read its flag
+    paging      response time -- Plane's pagination envelope
     transforms  listing time -- reshape the advertised catalogue
 
 Names are re-exported here so a resource module needs one import, not four. The
@@ -24,16 +23,6 @@ submodules stay importable for callers that want to be explicit.
 
 from __future__ import annotations
 
-from plane_mcp.toolkit.governance import (
-    WORK_ITEM_TYPES,
-    migration_in_progress,
-    plan_gated,
-    plan_required,
-    project_owns,
-    scoped,
-    workspace_owns,
-    workspace_owns_resource,
-)
 from plane_mcp.toolkit.mentions import (
     MENTION_TOKEN,
     mention_user_ids,
@@ -42,7 +31,7 @@ from plane_mcp.toolkit.mentions import (
     tokenize_mentions,
     unmentionable,
 )
-from plane_mcp.toolkit.paging import dump_results, envelope, pql_failure, workitem_page
+from plane_mcp.toolkit.paging import dump_results, envelope, workitem_page
 from plane_mcp.toolkit.runtime import (
     as_params,
     coerce_list,
@@ -65,7 +54,6 @@ from plane_mcp.toolkit.transforms import StripOutputSchemas
 
 __all__ = [
     "MENTION_TOKEN",
-    "WORK_ITEM_TYPES",
     "Action",
     "StripOutputSchemas",
     "action_names",
@@ -77,24 +65,16 @@ __all__ = [
     "envelope",
     "ids_of",
     "mention_user_ids",
-    "migration_in_progress",
     "missing",
     "needs",
     "one_of",
     "opt",
     "rich_text",
     "page_params",
-    "plan_gated",
     "project_mention_error",
-    "plan_required",
-    "project_owns",
-    "pql_failure",
     "render_mentions",
     "require",
-    "scoped",
     "tokenize_mentions",
     "unmentionable",
-    "workspace_owns",
-    "workspace_owns_resource",
     "workitem_page",
 ]

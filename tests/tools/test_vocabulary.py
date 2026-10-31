@@ -9,12 +9,11 @@ import pytest
 
 from plane_mcp.toolkit.spec import action_names
 
-PQL_FIELD = re.compile(r"work_items__\w+")
 RESIDUE = re.compile(r"work_item[a-z_]*")
 
 
 def _residue(text: str) -> set[str]:
-    return set(RESIDUE.findall(PQL_FIELD.sub("", text or "")))
+    return set(RESIDUE.findall(text or ""))
 
 
 def test_no_tool_name_or_action_says_work_item(resource_modules):
@@ -41,18 +40,10 @@ def test_no_advertised_schema_says_work_item(listing):
     assert not found, "the advertised listing still says work_item:\n  " + "\n  ".join(found)
 
 
-def test_the_pql_reference_output_says_workitem(registered):
-    """Tool *output*, not a description -- the earlier checks cannot see it."""
-    read = registered["get_pql_reference"].fn
-    for detail in ("full", "brief"):
-        assert not _residue(json.dumps(read(detail=detail))), detail
-
-
 @pytest.mark.parametrize(
     ("tool_name", "args"),
     [
         ("workitem", {"action": "retrieve"}),
-        ("workitem_property", {"action": "get_value", "project_id": "p"}),
         ("workitem_relation", {"action": "delete", "project_id": "p"}),
     ],
 )
@@ -96,10 +87,10 @@ def test_a_retired_name_accepts_the_retired_parameter_spelling(registered_with_a
 def test_the_aliases_keep_the_retired_spelling(aliases):
     """The other direction: a retired name is history and must not be modernised.
 
-    74 of the aliased names contain `work_item`. Renaming a key here would
+    38 of the aliased names contain `work_item`. Renaming a key here would
     silently drop the caller it exists to serve rather than resolve them.
     """
-    assert len(aliases) == 169
+    assert len(aliases) == 67
     retired_spelling = [name for name in aliases if "work_item" in name]
-    assert len(retired_spelling) == 74, f"expected 74 aliased work_item names, got {len(retired_spelling)}"
+    assert len(retired_spelling) == 38, f"expected 38 aliased work_item names, got {len(retired_spelling)}"
     assert not [name for name in aliases if "workitem" in name], "an alias key was renamed"

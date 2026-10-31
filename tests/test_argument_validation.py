@@ -2,7 +2,7 @@
 
 One flat schema per tool cannot express which action wants what, so an argument
 meant for a different action validates cleanly and is then silently dropped. The
-observed failure: `workitem count` asked with a project id and a filter under the
+observed failure: `workitem count` (since removed) asked with a project id and a filter under the
 wrong parameter name answered for the whole workspace, in the shape of a correct
 answer to the question that was asked.
 
@@ -48,40 +48,35 @@ def listed_tools():
 
 
 def test_an_argument_the_action_does_not_take_is_named(rejection):
-    message = rejection("workitem", {"action": "count", "query": "urgent"})
+    message = rejection("workitem", {"action": "list", "query": "urgent"})
     assert message and "does not take: query" in message
 
 
 def test_the_rejection_lists_what_the_action_does_take(rejection):
     """A refusal that does not say what to send instead just costs another turn."""
-    message = rejection("workitem", {"action": "count", "query": "urgent"})
-    for accepted in action_arguments()["workitem"]["count"]:
+    message = rejection("workitem", {"action": "list", "query": "urgent"})
+    for accepted in action_arguments()["workitem"]["list"]:
         assert accepted in message
 
 
 def test_every_stray_argument_is_named_at_once(rejection):
     """Naming one at a time would cost a round trip per mistake."""
-    message = rejection("workitem", {"action": "count", "query": "x", "name": "y"})
+    message = rejection("workitem", {"action": "list", "query": "x", "name": "y"})
     assert message and "name, query" in message
 
 
 def test_an_accepted_argument_passes(rejection):
-    assert rejection("workitem", {"action": "count", "pql": 'priority = "urgent"'}) is None
-
-
-def test_project_id_is_accepted_on_count(rejection):
-    """count scopes to a project, so the parameter that surfaced the bug is now valid."""
-    assert rejection("workitem", {"action": "count", "project_id": "p"}) is None
+    assert rejection("workitem", {"action": "list", "project_id": "p", "order_by": "-created_at"}) is None
 
 
 @pytest.mark.parametrize("value", ["", 0, None, [], {}, False], ids=["str", "int", "none", "list", "dict", "bool"])
 def test_an_argument_left_at_its_default_says_nothing_and_is_allowed(rejection, value):
     """Some clients pad a request with every parameter; that is not an instruction."""
-    assert rejection("workitem", {"action": "count", "query": value}) is None
+    assert rejection("workitem", {"action": "list", "query": value}) is None
 
 
 def test_action_itself_is_never_stray(rejection):
-    assert rejection("workitem", {"action": "count"}) is None
+    assert rejection("workitem", {"action": "list"}) is None
 
 
 def test_a_call_that_chose_no_action_is_told_which_actions_exist(rejection):
@@ -105,16 +100,6 @@ def test_every_resource_names_its_actions_when_none_is_chosen(rejection):
             assert action in message, f"{tool} omitted {action}"
 
 
-def test_a_single_operation_tool_takes_no_action_parameter(rejection):
-    """get_pql_reference is the only single-operation tool: its schema omits
-    action, so demanding one leaves no valid call form. Its arguments are
-    still checked against its only action."""
-    assert rejection("get_pql_reference", {}) is None
-    assert rejection("get_pql_reference", {"detail": "brief"}) is None
-    message = rejection("get_pql_reference", {"bogus": 1})
-    assert message and "does not take: bogus" in message
-
-
 def test_a_call_with_no_action_on_an_unknown_tool_is_left_to_the_server(rejection):
     """The missing-action check must not claim tools this server does not own."""
     assert rejection("not_a_tool", {}) is None
@@ -126,7 +111,7 @@ def test_an_unknown_action_is_left_to_the_schema(rejection):
 
 
 def test_an_unknown_tool_is_left_to_the_server(rejection):
-    assert rejection("not_a_tool", {"action": "count", "query": "x"}) is None
+    assert rejection("not_a_tool", {"action": "list", "query": "x"}) is None
 
 
 def test_a_retired_name_is_not_checked(rejection):
@@ -199,27 +184,27 @@ def _call(tool: str, arguments: dict) -> str:
 
 
 def test_a_stray_argument_never_reaches_plane():
-    """The 403 the credentials would earn is the proof a call got through."""
-    answer = _call("workitem", {"action": "count", "project_id": "p", "query": "urgent"})
+    """The HTTP error the fake credentials would earn is the proof a call got through."""
+    answer = _call("workitem", {"action": "list", "project_id": "p", "query": "urgent"})
     assert "does not take: query" in answer
-    assert "403" not in answer
+    assert "HTTP 4" not in answer
 
 
 def test_a_call_with_no_action_never_reaches_plane():
     """The refusal has to replace the schema error, not arrive after a wasted call."""
     answer = _call("workitem", {"project_id": "p"})
     assert "requires an action" in answer
-    assert "403" not in answer
+    assert "HTTP 4" not in answer
 
 
 def test_a_clean_call_is_not_blocked():
-    answer = _call("workitem", {"action": "count", "project_id": "p", "pql": 'priority = "urgent"'})
+    answer = _call("workitem", {"action": "list", "project_id": "p", "order_by": "-created_at"})
     assert "does not take" not in answer
-    assert "403" in answer, "the call did not reach Plane"
+    assert "HTTP 4" in answer, "the call did not reach Plane"
 
 
 def test_a_retired_name_still_works():
-    """169 aliases arrive under retired spellings; checking them would break every one."""
+    """Aliases arrive under retired spellings; checking them would break every one."""
     answer = _call("retrieve_work_item", {"project_id": "p", "work_item_id": "w"})
     assert "does not take" not in answer
 

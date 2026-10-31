@@ -20,11 +20,6 @@ from tests.tools.test_dispatch import CONDITIONAL, NEEDS_FIXTURE, _value
 
 NEXT = "CURSOR-NEXT"
 
-# Endpoints Plane does not paginate. The SDK response model carries no cursor
-# fields at all, so the action must not advertise `cursor`/`per_page` either --
-# claiming to page and then silently truncating is the bug this test exists for.
-NOT_PAGINATED = {("initiative", "list")}
-
 
 class _Page:
     """A page of results carrying a full pagination envelope."""
@@ -73,19 +68,6 @@ def test_a_cursor_accepting_action_returns_a_cursor(mod, action, registered, spy
         f"{mod.NAME}.{action.name} accepts `cursor` but its result exposes no next_cursor "
         f"-- a caller can page in but never page on. Got {type(result).__name__}."
     )
-
-
-@pytest.mark.parametrize(("mod_name", "action_name"), sorted(NOT_PAGINATED))
-def test_an_unpaginated_action_does_not_advertise_a_cursor(mod_name, action_name):
-    """Better to not offer paging than to offer it and drop the caller's place."""
-    mod = next(m for m in RESOURCES if m.NAME == mod_name)
-    action = next(a for a in mod.ACTIONS if a.name == action_name)
-
-    assert "cursor" not in action.optional, (
-        f"{mod_name}.{action_name} advertises `cursor`, but its SDK response model carries "
-        "no cursor fields, so the page it returns is silently truncated"
-    )
-    assert "per_page" not in action.optional
 
 
 def test_project_list_bounds_its_own_page(registered, spy):

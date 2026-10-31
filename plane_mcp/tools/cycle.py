@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Annotated, Any, Literal, get_args
+from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
 from plane.models.cycles import (
@@ -16,10 +16,8 @@ from plane.models.cycles import (
 )
 from plane.models.enums import CycleStatusEnum
 from plane.models.query_params import CycleLiteListQueryParams, LiteListQueryParams
-from pydantic import Field
 
 from plane_mcp.client import get_plane_client_context
-from plane_mcp.pql_reference import PQL_FIELD_HINT
 from plane_mcp.toolkit import (
     Action,
     build_annotations,
@@ -55,7 +53,7 @@ ACTIONS = (
     Action(
         "list_workitems",
         ("project_id", "cycle_id"),
-        ("pql", "order_by", "cursor", "per_page", "expand", "fields"),
+        ("order_by", "cursor", "per_page", "expand", "fields"),
         read=True,
     ),
     Action(
@@ -79,7 +77,7 @@ ACTIONS = (
 
 FOOTER = (
     f"status filters active cycles: {', '.join(STATUSES)}; it is ignored when archived is true. "
-    "Dates are ISO 8601 (YYYY-MM-DD). owned_by is a member id. " + PQL_FIELD_HINT
+    "Dates are ISO 8601 (YYYY-MM-DD). owned_by is a member id."
 )
 
 LEGACY = {
@@ -142,7 +140,6 @@ def register(mcp: FastMCP) -> None:
         archived: bool = False,
         add_ids: str = "",
         remove_ids: str = "",
-        pql: Annotated[str, Field(description=PQL_FIELD_HINT)] = "",
         expand: str = "",
         fields: str = "",
         external_source: str = "",
@@ -225,10 +222,7 @@ def register(mcp: FastMCP) -> None:
 
         if action == "list_workitems":
             return workitem_page(
-                NAME,
-                action,
                 client.cycles.list_work_items,
-                pql=pql,
                 order_by=order_by,
                 cursor=cursor,
                 per_page=per_page,

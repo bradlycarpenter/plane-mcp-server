@@ -12,17 +12,14 @@ from typing import Literal, get_args, get_origin, get_type_hints
 
 import pytest
 
-from plane_mcp.toolkit.governance import WORKSPACE_MANAGED
 from plane_mcp.toolkit.spec import action_names
 
 # Ratchets. Lowering these is routine; raising one is a design decision.
-LISTING_BUDGET_CHARS = 70_000
+LISTING_BUDGET_CHARS = 25_000
 MAX_ADVERTISED_TOOLS = 35  # strictest published client cap is 40 -- leave headroom
 NAME_BUDGET = 46  # 64-char provider limit, less room for a client prefix
-UNMAPPED_BUDGET = 7  # retired tools that cannot be aliased; see the test for the shape
+UNMAPPED_BUDGET = 3  # retired tools that cannot be aliased; see the test for the shape
 
-# "resolve" is deliberately absent: workitem_type.resolve creates the type when
-# it does not exist, so the name reads like a lookup but the action is not one.
 READ_PREFIXES = ("list", "retrieve", "get", "search", "count", "read", "me")
 
 
@@ -35,37 +32,20 @@ def _module_ids(mods):
 # conversation. Editing this list is the deliberate act that makes that happen;
 # appending to it is not.
 CATALOGUE = [
-    "customer",
-    "customer_property",
-    "customer_request",
     "cycle",
-    "get_pql_reference",
-    "initiative",
     "intake",
     "label",
     "member",
-    "milestone",
     "module",
-    "page",
     "project",
-    "project_estimate",
-    "release",
-    "release_label",
-    "release_tag",
     "state",
-    "work_log",
     "workitem",
     "workitem_activity",
     "workitem_attachment",
     "workitem_comment",
     "workitem_link",
-    "workitem_property",
     "workitem_relation",
-    "workitem_type",
-    "workspace",
     # Appended, not sorted in: see registry.py.
-    "template",
-    "collection",
 ]
 
 
@@ -262,46 +242,3 @@ def test_unmapped_stays_small(unmapped):
 
 def test_aliases_do_not_shadow_a_resource_tool(aliases, registered):
     assert not set(aliases) & set(registered)
-
-
-# A resource whose scope can be refused must say which noun it is refusing, or the
-# caller gets a raw 400 and no idea which scope to use. Structure is each resource's
-# own business; this is about what a caller sees.
-
-SCOPED_WRITES = [
-    (
-        "state",
-        "states.create",
-        {"action": "create", "project_id": "p", "name": "S", "color": "#fff"},
-        {"code": WORKSPACE_MANAGED},
-    ),
-    (
-        "workitem_type",
-        "work_item_types.create",
-        {"action": "create", "project_id": "p", "name": "T"},
-        {"code": WORKSPACE_MANAGED},
-    ),
-    (
-        "workitem_property",
-        "workspace_work_item_properties.create",
-        {"action": "create", "workitem_type_id": "t", "display_name": "P", "property_type": "TEXT"},
-        {"error": "Workspace work item types are not enabled"},
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    ("name", "method", "arguments", "refusal"), SCOPED_WRITES, ids=[case[0] for case in SCOPED_WRITES]
-)
-def test_a_wrong_scope_refusal_is_answered_not_raised(name, method, arguments, refusal, registered, spy):
-    """Without `@scoped` the caller gets a raw 400 and no idea which scope to use."""
-    from plane.errors.errors import HttpError
-
-    spy.returns[method] = HttpError("refused", status_code=400, response=refusal)
-
-    result = registered[name].fn(**arguments)
-
-    assert isinstance(result, str) and result.startswith("Error:"), (
-        f"{name} let a wrong-scope refusal out raw; it needs @scoped"
-    )
-    assert "project_id" in result, "named the problem without naming the fix"

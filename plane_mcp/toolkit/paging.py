@@ -1,25 +1,20 @@
-"""Pagination envelopes and PQL failure handling for Plane list endpoints.
+"""Pagination envelopes for Plane list endpoints.
 
 Several resources list work items -- workitem, cycle and module -- and all of
-them must return the same envelope shape and handle an invalid PQL filter the
-same way. Keeping that here is what makes them consistent.
+them must return the same envelope shape. Keeping that here is what makes them
+consistent.
 
 This is Plane's pagination contract, not one tool surface's: any surface talking
-to these endpoints needs the same envelope and the same 400-on-bad-PQL answer.
+to these endpoints needs the same envelope.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from fastmcp.utilities.logging import get_logger
-from plane.errors.errors import HttpError
 from plane.models.query_params import WorkItemQueryParams
 
-from plane_mcp.pql_reference import PQL_FULL_REFERENCE
 from plane_mcp.toolkit.runtime import opt
-
-logger = get_logger(__name__)
 
 
 def dump_results(items: Any, fields: str | None) -> list[Any]:
@@ -77,11 +72,8 @@ def envelope(response: Any, fields: str | None = None) -> dict[str, Any]:
 
 
 def workitem_page(
-    tool: str,
-    action: str,
     method: Any,
     *,
-    pql: str = "",
     order_by: str = "",
     cursor: str = "",
     per_page: int = 0,
@@ -90,46 +82,14 @@ def workitem_page(
     **target: Any,
 ) -> dict[str, Any]:
     """One page of the work items belonging to a parent record."""
-    try:
-        response = method(
-            **target,
-            params=WorkItemQueryParams(
-                pql=opt(pql),
-                order_by=opt(order_by),
-                per_page=opt(per_page),
-                cursor=opt(cursor),
-                expand=opt(expand),
-                fields=opt(fields),
-            ),
-        )
-    except HttpError as exc:
-        failure = pql_failure(tool, action, pql, exc)
-        if failure is None:
-            raise
-        return failure
+    response = method(
+        **target,
+        params=WorkItemQueryParams(
+            order_by=opt(order_by),
+            per_page=opt(per_page),
+            cursor=opt(cursor),
+            expand=opt(expand),
+            fields=opt(fields),
+        ),
+    )
     return envelope(response, opt(fields))
-
-
-def pql_failure(tool: str, action: str, pql: str, exc: HttpError) -> dict[str, Any] | None:
-    """Turn an invalid-PQL 400 into a correctable answer instead of an exception."""
-    if not (pql and exc.status_code == 400 and isinstance(exc.response, dict)):
-        return None
-    detail = _filter_complaint(exc.response)
-    if detail is None:
-        return None
-    logger.warning("%s %s: invalid PQL %r -> %s", tool, action, pql, exc.response)
-    return {
-        "error": detail,
-        "failed_pql": pql,
-        "pql_reference": PQL_FULL_REFERENCE,
-        "hint": f"The PQL above failed. Fix it using the reference and retry {tool} {action}.",
-    }
-
-
-def _filter_complaint(body: dict[str, Any]) -> Any | None:
-    """What a 400 said about the filter, or None when it was about something else."""
-    if "pql" in body:
-        return body["pql"]
-    if not any(word in str(body).lower() for word in ("pql", "filter")):
-        return None
-    return body.get("message") or body.get("error") or body.get("detail") or body

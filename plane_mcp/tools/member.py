@@ -1,4 +1,4 @@
-"""Workspace and project members, and the role definitions they can hold."""
+"""Workspace and project members."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from plane_mcp.client import get_plane_client_context
 from plane_mcp.toolkit import Action, build_annotations, build_description, missing, opt
 
 NAME = "member"
-TITLE = "Members and roles"
+TITLE = "Members"
 
 ACTIONS = (
     Action("me", note="the authenticated user", read=True),
@@ -33,36 +33,24 @@ ACTIONS = (
         read=True,
     ),
     Action("list_project", ("project_id",), read=True),
-    Action("list_roles", optional=("namespace", "cursor", "per_page"), read=True),
-    Action("retrieve_role", ("role_id",), read=True),
-)
-
-FOOTER = (
-    "namespace is 'workspace' (Owner/Admin/Member/Guest) or 'project' "
-    "(Admin/Contributor/Commenter/Guest); omit for both. A role slug is stable but not "
-    "globally unique -- key on (namespace, slug)."
 )
 
 LEGACY = {
     "get_me": "me",
     "get_workspace_members": "list_workspace",
     "get_project_members": "list_project",
-    "list_roles": "list_roles",
-    "retrieve_role": "retrieve_role",
 }
 
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool(
         name=NAME,
-        description=build_description("Workspace and project members, and role definitions.", ACTIONS, FOOTER),
+        description=build_description("Workspace and project members.", ACTIONS),
         annotations=build_annotations(TITLE, ACTIONS),
     )
     def member(
-        action: Literal["me", "list_workspace", "list_project", "list_roles", "retrieve_role"],
+        action: Literal["me", "list_workspace", "list_project"],
         project_id: str = "",
-        role_id: str = "",
-        namespace: str = "",
         first_name: str = "",
         last_name: str = "",
         email: str = "",
@@ -97,19 +85,6 @@ def register(mcp: FastMCP) -> None:
                 ),
             )
 
-        if action == "list_project":
-            if not project_id:
-                return missing(action, "project_id")
-            return client.projects.get_members(workspace_slug=workspace_slug, project_id=project_id)
-
-        if action == "list_roles":
-            return client.roles.list(
-                workspace_slug=workspace_slug,
-                namespace=opt(namespace),
-                per_page=opt(per_page),
-                cursor=opt(cursor),
-            )
-
-        if not role_id:
-            return missing(action, "role_id")
-        return client.roles.retrieve(workspace_slug=workspace_slug, role_id=role_id)
+        if not project_id:
+            return missing(action, "project_id")
+        return client.projects.get_members(workspace_slug=workspace_slug, project_id=project_id)

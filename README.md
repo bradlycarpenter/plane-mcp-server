@@ -2,12 +2,18 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for
 [Plane](https://plane.so). Gives an AI agent tools to read and manage projects,
-work items, cycles, modules, releases, customers and more.
+work items, cycles, modules, intake and more.
+
+This is a fork of [makeplane/plane-mcp-server](https://github.com/makeplane/plane-mcp-server)
+trimmed to what **Plane Community Edition** supports. Commercial-only resources
+(customers, initiatives, milestones, releases, pages, work item types and
+properties, work logs, templates, estimates, roles, custom relation definitions,
+workspace-level states, PQL, work item archiving) are not exposed.
 
 Built on [FastMCP](https://github.com/jlowin/fastmcp) and the official
 [`plane-sdk`](https://pypi.org/project/plane-sdk/).
 
-- **30 tools**, one per Plane resource, covering 207 operations
+- **13 tools**, one per Plane resource, covering 73 operations
 - **Local or remote** — stdio, streamable HTTP, SSE
 - **OAuth or API key** authentication
 
@@ -34,7 +40,8 @@ Add this to your MCP client's configuration:
 
 `uvx` needs no install step. Requires Python 3.10+.
 
-For a self-hosted Plane, add `"PLANE_BASE_URL": "https://plane.example.com"`.
+For a self-hosted Plane — the usual case for Community Edition — add
+`"PLANE_BASE_URL": "https://plane.example.com"`.
 
 ## Transports
 
@@ -47,9 +54,12 @@ Runs as a subprocess of your MCP client. Configuration as shown above; needs
 PLANE_API_KEY=... PLANE_WORKSPACE_SLUG=... uvx plane-mcp-server stdio
 ```
 
-### HTTP with OAuth — hosted
+The HTTP and SSE endpoints below are served by this server when run with
+`python -m plane_mcp http`; `<server>` is wherever you host it.
 
-`https://mcp.plane.so/http/mcp`
+### HTTP with OAuth
+
+`https://<server>/http/mcp`
 
 The OAuth flow is handled on connect; no credentials in your config. For clients
 without native remote MCP support, bridge with `mcp-remote`:
@@ -59,7 +69,7 @@ without native remote MCP support, bridge with `mcp-remote`:
   "mcpServers": {
     "plane": {
       "command": "npx",
-      "args": ["mcp-remote@latest", "https://mcp.plane.so/http/mcp"]
+      "args": ["mcp-remote@latest", "https://<server>/http/mcp"]
     }
   }
 }
@@ -67,9 +77,9 @@ without native remote MCP support, bridge with `mcp-remote`:
 
 Requires Node.js 22+.
 
-### HTTP with a personal access token — hosted
+### HTTP with a personal access token
 
-`https://mcp.plane.so/http/api-key/mcp`
+`https://<server>/http/api-key/mcp`
 
 | Header | Value |
 |---|---|
@@ -81,7 +91,7 @@ Requires Node.js 22+.
   "mcpServers": {
     "plane": {
       "command": "npx",
-      "args": ["mcp-remote@latest", "https://mcp.plane.so/http/api-key/mcp"],
+      "args": ["mcp-remote@latest", "https://<server>/http/api-key/mcp"],
       "headers": {
         "Authorization": "Bearer <PAT>",
         "X-Workspace-slug": "<workspace-slug>"
@@ -93,17 +103,17 @@ Requires Node.js 22+.
 
 ### SSE — deprecated
 
-`https://mcp.plane.so/sse` is maintained for backward compatibility only. Use an
+`https://<server>/sse` is maintained for backward compatibility only. Use an
 HTTP transport instead.
 
 ## Tools
 
-The server advertises 30 tools, one per resource. Each takes an `action`
+The server advertises 13 tools, one per resource. Each takes an `action`
 parameter that selects the operation:
 
 ```python
 workitem(action="create", project_id=..., name="Fix login")
-workitem(action="list", project_id=..., pql='state__group = "started"')
+workitem(action="list", project_id=...)
 cycle(action="archive", project_id=..., cycle_id=...)
 ```
 
@@ -112,29 +122,17 @@ parameters, so the catalogue is self-documenting at call time.
 
 **→ [Full tool and action reference](plane_mcp/tools/README.md)**
 
-### Querying work items
-
-List, count and search accept **PQL**, Plane's query language:
-
-```python
-workitem(action="list", project_id=..., pql='state__group = "started" AND priority = "urgent"')
-workitem(action="count", pql='assignees__id = "<member id>"', group_by="state_id")
-```
-
-Call `get_pql_reference` for the full syntax, operators and worked examples.
-
 ### Upgrading from the per-operation tools
 
 Earlier releases exposed one tool per API operation. **Existing integrations keep
-working**: 169 of those 177 names still resolve to the consolidated tool, so a
-saved prompt or script calling `create_work_item` or `list_cycles` needs no
-change. They are no longer advertised, and they keep the parameter names they
-shipped with (`work_item_id`, not `workitem_id`).
+working** for the resources this fork keeps: their old names (`create_work_item`,
+`list_cycles`, ...) still resolve to the consolidated tool, unadvertised, and keep
+the parameter names they shipped with (`work_item_id`, not `workitem_id`). Names
+for removed resources no longer resolve.
 
-Seven names chose between two operations with a parameter
+Three names chose between two operations with a parameter
 (`manage_project_archive(archive=False)`), which one tool-and-action pair cannot
-reproduce; calling one tells you its replacement. `get_pql_reference` is
-unchanged.
+reproduce; calling one tells you its replacement.
 
 ## Configuration
 
@@ -242,7 +240,6 @@ They write real data to that workspace.
 | `plane_mcp/auth/` | OAuth provider and header auth |
 | `plane_mcp/tools/` | the tool surface: one module per Plane resource |
 | `plane_mcp/toolkit/` | shared building blocks for the tool surface |
-| `plane_mcp/pql_reference.py` | PQL syntax reference served to models |
 
 ## Contributing
 

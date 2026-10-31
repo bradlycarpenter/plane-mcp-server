@@ -7,7 +7,7 @@ moved during consolidation, so the risk is concrete, not theoretical.
 
 The convention, enforced here: write a cross-reference in backticks, as
 `` `tool action` `` or `` `tool` ``. Plain prose is never parsed as a reference,
-so "the workspace palette" stays prose while `` `release_label create` `` is
+so "the workspace palette" stays prose while `` `label create` `` is
 checked.
 """
 
@@ -30,7 +30,7 @@ def _texts(tool):
 
 
 def test_backticked_references_resolve(registered, resource_modules):
-    """`workitem_type resolve` must name a real action on a real tool."""
+    """`cycle list_workitems` must name a real action on a real tool."""
     tools = set(registered)
     actions = {mod.NAME: set(action_names(mod.ACTIONS)) for mod in resource_modules}
 
@@ -83,14 +83,6 @@ def test_no_description_references_a_retired_tool_name(registered, retired_tool_
     )
 
 
-def test_the_pql_hint_names_the_reference_tool(registered):
-    """The hint is where a model learns PQL syntax; it must name a live tool."""
-    assert "get_pql_reference" in registered
-    for tool, param in (("workitem", "pql"), ("cycle", "pql"), ("module", "pql")):
-        description = registered[tool].parameters["properties"][param].get("description", "")
-        assert "get_pql_reference" in description, f"{tool}.{param} does not say where to get the full PQL reference"
-
-
 def _resolves(reference: str, registered, actions) -> str | None:
     """None if `tool` or `tool action` names something real, else why not."""
     match = REFERENCE.match(reference.strip().strip("`"))
@@ -120,21 +112,3 @@ def test_the_server_instructions_name_live_tools(registered, resource_modules):
         if REFERENCE.match(span.strip()) and (problem := _resolves(span, registered, actions))
     ]
     assert not broken, "the server instructions point at tools that do not exist:\n  " + "\n  ".join(broken)
-
-
-def test_the_pql_reference_resolvers_name_live_tools(registered, resource_modules):
-    """The PQL reference tells a model which tool resolves a name to an id.
-
-    It reaches the model as tool *output* rather than as a description, so the
-    checks above never saw it -- and the table went on naming `work_item_type
-    list` after that tool became `workitem_type`. Every pointer is followed here.
-    """
-    from plane_mcp.pql_reference import RESOLVERS
-
-    actions = {mod.NAME: set(action_names(mod.ACTIONS)) for mod in resource_modules}
-    broken = [
-        f"{key} -> {problem}"
-        for key, reference in RESOLVERS.items()
-        if (problem := _resolves(reference, registered, actions))
-    ]
-    assert not broken, "the PQL reference points at tools that do not exist:\n  " + "\n  ".join(broken)

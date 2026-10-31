@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from fastmcp import FastMCP
 from plane.models.modules import (
@@ -13,10 +13,8 @@ from plane.models.modules import (
     UpdateModule,
 )
 from plane.models.query_params import LiteListQueryParams
-from pydantic import Field
 
 from plane_mcp.client import get_plane_client_context
-from plane_mcp.pql_reference import PQL_FIELD_HINT
 from plane_mcp.toolkit import (
     Action,
     build_annotations,
@@ -61,7 +59,7 @@ ACTIONS = (
     Action(
         "list_workitems",
         ("project_id", "module_id"),
-        ("pql", "order_by", "cursor", "per_page", "expand", "fields"),
+        ("order_by", "cursor", "per_page", "expand", "fields"),
         read=True,
     ),
     Action(
@@ -74,10 +72,7 @@ ACTIONS = (
     Action("unarchive", ("project_id", "module_id")),
 )
 
-FOOTER = (
-    f"status is one of: {', '.join(STATUSES)}. Dates are ISO 8601 (YYYY-MM-DD). "
-    "lead and members are member ids. " + PQL_FIELD_HINT
-)
+FOOTER = f"status is one of: {', '.join(STATUSES)}. Dates are ISO 8601 (YYYY-MM-DD). lead and members are member ids."
 
 LEGACY = {
     "list_modules": "list",
@@ -124,7 +119,6 @@ def register(mcp: FastMCP) -> None:
         archived: bool = False,
         add_ids: str = "",
         remove_ids: str = "",
-        pql: Annotated[str, Field(description=PQL_FIELD_HINT)] = "",
         expand: str = "",
         fields: str = "",
         external_source: str = "",
@@ -200,10 +194,7 @@ def register(mcp: FastMCP) -> None:
 
         if action == "list_workitems":
             return workitem_page(
-                NAME,
-                action,
                 client.modules.list_work_items,
-                pql=pql,
                 order_by=order_by,
                 cursor=cursor,
                 per_page=per_page,

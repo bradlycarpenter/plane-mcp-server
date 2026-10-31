@@ -21,56 +21,32 @@ from plane_mcp.toolkit.spec import action_names
 # Values that satisfy a parameter well enough to reach the SDK call. Enum-valued
 # parameters need a member of their own vocabulary; the rest take a plausible id.
 SAMPLES: dict[str, object] = {
-    "status": {"cycle": "current", "module": "backlog", "intake": 1, "release": "planned"},
+    "status": {"cycle": "current", "module": "backlog", "intake": 1},
     "priority": "medium",
     "group": "started",
     "relation_type": "blocked_by",
-    "property_type": "TEXT",
-    # page and project take the numeric level; collection names it.
-    "access": {"page": 1, "project": 1, "collection": "private"},
-    "member_access": "edit",
+    "access": {"project": 1},
     "network": 2,
     "timezone": "UTC",
     "workitem_identifier": "ENG-42",
-    "kind": "workitem",
-    "template_data": '{"name": "Spec"}',
 }
 
 # Actions that require *one of* several optional parameters -- a condition the
 # declaration cannot express, so the case is spelled out here.
 CONDITIONAL: dict[tuple[str, str], dict[str, object]] = {
-    # An update has to carry a field to change; page_id alone is refused.
-    ("page", "update"): {"name": "Renamed"},
     # Without project_id this is the workspace catalogue, which requires a group.
     ("state", "create"): {"group": "started"},
-    ("template", "update"): {"name": "Renamed"},
-    ("collection", "update"): {"name": "Renamed"},
     ("workitem_link", "update"): {"title": "Renamed"},
     ("cycle", "manage_workitems"): {"add_ids": "id-1"},
     ("module", "manage_workitems"): {"add_ids": "id-1"},
-    ("milestone", "manage_workitems"): {"add_ids": "id-1"},
-    ("initiative", "manage_workitems"): {"add_ids": "id-1"},
     ("workitem", "manage_assignee"): {"add_user_id": "id-1"},
     ("workitem", "manage_label"): {"add_label_id": "id-1"},
-    ("workitem", "count"): {"pql": "state__group = 'started'"},
     ("intake", "update"): {"status": 1},
     ("workitem_relation", "create"): {"relation_type": "blocked_by"},
-    ("workitem_property", "manage_type_properties"): {"attach_ids": "id-1"},
-    ("workitem_property", "set_value"): {"value": "text"},
-    ("project_estimate", "create_points"): {"points": '[{"value": "1", "key": 0}]'},
-    ("customer", "delete"): {"customer_id": "id-1"},
-    ("customer", "manage_workitems"): {"link_ids": "id-1"},
-    ("customer_property", "set_values"): {"values": '{"prop-1": ["Enterprise"]}'},
-    ("release", "update_changelog"): {"description_html": "<p>notes</p>"},
-    ("release", "manage_workitems"): {"add_ids": "id-1"},
-    ("release_label", "list"): {},
 }
 
 # Actions whose guard clause legitimately answers without calling the SDK.
-NO_CALL_EXPECTED: set[tuple[str, str]] = {
-    ("get_pql_reference", "read"),  # returns static reference text
-    ("workspace", "retrieve"),  # answered from the connection's own credentials
-}
+NO_CALL_EXPECTED: set[tuple[str, str]] = set()
 
 # Actions that need populated remote state or an outbound HTTP fetch to get past
 # their own preconditions. Covered by tests/tools/test_attachments.py.
@@ -158,12 +134,6 @@ MEANINGFUL_ZEROS = [
     ("project", dict(action="update", project_id="p", network=0), "network"),
     ("label", dict(action="update", project_id="p", label_id="l", sort_order=0), "sort_order"),
     ("state", dict(action="update", project_id="p", state_id="s", sequence=0), "sequence"),
-    (
-        "project_estimate",
-        dict(action="update_point", project_id="p", estimate_id="e", estimate_point_id="pt", key=0),
-        "key",
-    ),
-    ("release_label", dict(action="update", label_id="l", sort_order=0), "sort_order"),
 ]
 
 
@@ -177,17 +147,45 @@ def test_a_zero_that_means_something_reaches_the_sdk(tool_name, args, field, reg
     assert sent == 0, f"{tool_name}.{args['action']} dropped {field}=0; it was sent as {sent!r}"
 
 
+# The surface names a feature; the SDK names the project's view flag for it.
+FEATURE_FLAGS = {
+    "modules": "module_view",
+    "cycles": "cycle_view",
+    "views": "issue_views_view",
+    "pages": "page_view",
+    "intakes": "intake_view",
+}
+
+
+@pytest.mark.parametrize("value", [True, False], ids=["enable", "disable"])
+@pytest.mark.parametrize(
+    "args",
+    [
+        dict(action="create", name="P", identifier="P"),
+        dict(action="update", project_id="p"),
+    ],
+    ids=["create", "update"],
+)
+def test_project_feature_flags_reach_the_sdk_as_view_fields(args, value, registered, spy):
+    """False disables, so it has to arrive as False rather than be dropped as unset."""
+    registered["project"].fn(**args, **dict.fromkeys(FEATURE_FLAGS, value))
+
+    sent = spy.recorder.only().kwargs["data"]
+    assert {field: getattr(sent, field) for field in FEATURE_FLAGS.values()} == dict.fromkeys(
+        FEATURE_FLAGS.values(), value
+    )
+
+
+def test_an_omitted_project_feature_flag_is_left_unset(registered, spy):
+    registered["project"].fn(action="update", project_id="p", name="Renamed")
+
+    sent = spy.recorder.only().kwargs["data"]
+    assert all(getattr(sent, field) is None for field in FEATURE_FLAGS.values())
+
+
 MEMBERSHIP_MUTATIONS = {
     ("cycle", "manage_workitems"),
-    ("customer", "manage_workitems"),
-    ("initiative", "add_projects"),
-    ("initiative", "remove_projects"),
-    ("initiative", "manage_workitems"),
-    ("milestone", "manage_workitems"),
     ("module", "manage_workitems"),
-    ("release", "manage_workitems"),
-    ("release_label", "attach"),
-    ("release_label", "detach"),
 }
 
 
@@ -224,8 +222,6 @@ def test_action_literal_covers_every_declared_action(mod, action, registered):
     ("args", "named"),
     [
         ({"action": "create", "project_id": "p", "name": "x", "priority": "sooner-than-urgent"}, "priority"),
-        ({"action": "count", "group_by": "state"}, "group_by"),
-        ({"action": "count", "sub_group_by": "nope"}, "sub_group_by"),
     ],
 )
 def test_an_unrecognised_workitem_value_is_refused_not_dropped(args, named, registered, spy):
@@ -292,109 +288,6 @@ def test_manage_accepts_several_ids_at_once(field, registered, spy):
     sent = update.kwargs["data"]
     written = sent.assignees if field == "assignee" else sent.labels
     assert written == ["existing", "a", "b"], written
-
-
-# Reported by an eval battery: `archive` answered nothing, so the agent verified with a
-# retrieve -- which 404s, because an archived item leaves the regular retrieve path.
-# One guaranteed-failing call per item archived.
-
-
-@pytest.mark.parametrize("archive", [True, False], ids=["archive", "unarchive"])
-def test_archiving_a_work_item_confirms_what_it_did(archive, registered, spy):
-    result = registered["workitem"].fn(action="archive", project_id="p", workitem_id="w", archive=archive)
-
-    assert result == {"workitem_id": "w", "archived": archive}, (
-        "archive answered nothing, so the only way to know it worked is a retrieve that 404s"
-    )
-    verb = "archive" if archive else "unarchive"
-    assert spy.recorder.only().method == f"work_items.{verb}"
-
-
-@pytest.mark.parametrize(
-    ("tool", "arguments", "method"),
-    [
-        ("workitem", {"project_id": "p", "workitem_id": "w"}, "work_items.archive"),
-        ("page", {"project_id": "p", "page_id": "g"}, "pages.archive_project_page"),
-    ],
-    ids=["workitem", "page"],
-)
-def test_archive_omitted_still_archives(tool, arguments, method, registered, spy):
-    """`archive` used to default to `True` in the signature, which put `default: true`
-    in the advertised schema -- so a client that pads a call with the schema defaults
-    sent `archive` on every other action and each refused it as a stray argument. The
-    default is now unset, and unset has to keep meaning archive."""
-    registered[tool].fn(action="archive", **arguments)
-
-    assert spy.recorder.only().method == method
-
-
-# Initiatives roll up work items as well as projects. The two child collections
-# reach different SDK sub-resources, and `manage_workitems` is the only action on
-# this tool that issues two calls, so the order between them is pinned here.
-
-
-class _WorkItemPage:
-    """One page of work items, carrying the full pagination envelope."""
-
-    results = [{"id": "w-1"}]
-    total_count = 1
-    count = 1
-    next_cursor = "c-2"
-    prev_cursor = "c-0"
-    next_page_results = True
-    prev_page_results = False
-
-
-def _initiative_calls(spy):
-    """The SDK calls a dispatch made, minus the workspace feature probe."""
-    return [call for call in spy.recorder.calls if call.method != "workspaces.get_features"]
-
-
-def test_listing_initiative_workitems_pages_through_its_own_sub_resource(registered, spy):
-    spy.__dict__["default"] = _WorkItemPage()
-
-    result = registered["initiative"].fn(action="list_workitems", initiative_id="i-1", cursor="c-1", per_page=5)
-
-    call = _initiative_calls(spy)[-1]
-    assert call.method == "initiatives.work_items.list", (
-        "work items must reach the work_items sub-resource, not projects or the deprecated epics"
-    )
-    assert call.kwargs["initiative_id"] == "i-1"
-    assert call.kwargs["params"] == {"cursor": "c-1", "per_page": 5}
-    assert result["next_cursor"] == "c-2", "a paged action must hand back the cursor it accepted"
-
-
-def test_managing_initiative_workitems_removes_before_it_adds(registered, spy):
-    """Removals first, so one call can swap an id out for another without the add
-    being undone by the remove that follows it."""
-    registered["initiative"].fn(action="manage_workitems", initiative_id="i-1", add_ids="w-new", remove_ids="w-old")
-
-    calls = _initiative_calls(spy)
-    assert [call.method for call in calls] == [
-        "initiatives.work_items.remove",
-        "initiatives.work_items.add",
-    ]
-    assert calls[0].kwargs["work_item_ids"] == ["w-old"]
-    assert calls[1].kwargs["work_item_ids"] == ["w-new"]
-
-
-@pytest.mark.parametrize(
-    ("supplied", "expected"),
-    [("w-1,w-2", ["w-1", "w-2"]), ('["w-1", "w-2"]', ["w-1", "w-2"]), ("w-1", ["w-1"])],
-    ids=["comma", "json", "single"],
-)
-def test_initiative_workitem_ids_take_one_id_or_several(supplied, expected, registered, spy):
-    registered["initiative"].fn(action="manage_workitems", initiative_id="i-1", add_ids=supplied)
-
-    assert _initiative_calls(spy)[-1].kwargs["work_item_ids"] == expected
-
-
-def test_managing_initiative_workitems_with_neither_side_asks_for_one(registered, spy):
-    """A call that names no ids would otherwise reach Plane and change nothing."""
-    result = registered["initiative"].fn(action="manage_workitems", initiative_id="i-1")
-
-    assert result == "Error: action 'manage_workitems' requires: add_ids or remove_ids."
-    assert not _initiative_calls(spy), "the refusal must replace the call, not follow it"
 
 
 # A link's title is the text Plane shows instead of the raw URL. The SDK and the API
@@ -487,18 +380,6 @@ def test_argument_repair_keeps_the_default_distinct_from_null(sent, arrives, reg
     assert repaired["target_date"] == arrives
 
 
-def test_retrieving_the_workspace_asks_plane_nothing(registered, spy, monkeypatch):
-    """The binding is in the connection's own credentials, so a request would be waste.
-    `current_workspace` itself is covered in tests/test_client.py."""
-    from plane_mcp.tools import workspace
-
-    bound = {"slug": "acme", "id": "ws-1", "name": "Acme Inc", "connected_via": "oauth"}
-    monkeypatch.setattr(workspace, "current_workspace", lambda: bound)
-
-    assert registered["workspace"].fn(action="retrieve") == bound
-    assert not spy.recorder.calls
-
-
 def test_no_description_warns_about_a_failure_the_caller_cannot_avoid(resource_modules, registered):
     """Naming a failure mode in a description buys a pre-flight probe on every run.
 
@@ -514,3 +395,21 @@ def test_no_description_warns_about_a_failure_the_caller_cannot_avoid(resource_m
         if phrase in registered[mod.NAME].description.lower()
     ]
     assert not offenders, f"descriptions predicting a refusal instead of letting the API report it: {offenders}"
+
+
+def test_an_intake_status_change_uses_the_plain_update(registered, spy):
+    """CE has no /status route, so a triage decision must go through the PATCH."""
+    registered["intake"].fn(action="update", project_id="p", workitem_id="w", status=1)
+
+    call = spy.recorder.only()
+    assert call.method == "intake.update"
+    assert call.kwargs["data"].status == 1
+
+
+def test_an_unknown_relation_type_is_refused_before_the_sdk(registered, spy):
+    result = registered["workitem_relation"].fn(
+        action="create", project_id="p", workitem_id="w", workitem_ids="x", relation_type="related_ish"
+    )
+
+    assert isinstance(result, str) and "relation_type" in result
+    assert not spy.recorder.calls

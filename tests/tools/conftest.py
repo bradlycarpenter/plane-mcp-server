@@ -22,13 +22,6 @@ def _run(coro):
     return asyncio.get_event_loop_policy().new_event_loop().run_until_complete(coro)
 
 
-class _AllFeaturesOn:
-    """A workspace feature set with everything enabled."""
-
-    def model_dump(self):
-        return {"initiatives": True, "customers": True, "releases": True, "epics": True}
-
-
 @pytest.fixture(scope="session")
 def resource_modules():
     return RESOURCES
@@ -72,9 +65,6 @@ def spy(monkeypatch):
     module's own reference is patched rather than the definition site.
     """
     client = SpyClient()
-    # Resources gated on a workspace feature probe it first; answer yes so the
-    # dispatch under test is what gets exercised.
-    client.returns["workspaces.get_features"] = _AllFeaturesOn()
     for mod in RESOURCES:
         if hasattr(mod, "get_plane_client_context"):
             monkeypatch.setattr(mod, "get_plane_client_context", lambda: (client, "acme"))

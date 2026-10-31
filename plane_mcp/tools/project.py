@@ -1,4 +1,8 @@
-"""Projects in a workspace, and the feature flags that govern them."""
+"""Projects in a workspace, and the feature flags that govern them.
+
+Community Edition has no features endpoint; the flags are fields on the project
+itself, and cycles, modules and intake start disabled.
+"""
 
 from __future__ import annotations
 
@@ -11,14 +15,12 @@ from plane.models.projects import (
     PaginatedProjectLiteResponse,
     PaginatedProjectMemberResponse,
     Project,
-    ProjectFeature,
-    ProjectWorklogSummary,
     UpdateProject,
 )
 from plane.models.query_params import ProjectLiteListQueryParams
 
 from plane_mcp.client import get_plane_client_context
-from plane_mcp.toolkit import Action, build_annotations, build_description, missing, needs, opt, plan_gated, rich_text
+from plane_mcp.toolkit import Action, build_annotations, build_description, missing, needs, opt, rich_text
 
 NAME = "project"
 TITLE = "Projects"
@@ -45,6 +47,11 @@ ACTIONS = (
             "timezone",
             "archive_in",
             "close_in",
+            "modules",
+            "cycles",
+            "views",
+            "pages",
+            "intakes",
             "external_source",
             "external_id",
         ),
@@ -67,7 +74,11 @@ ACTIONS = (
             "close_in",
             "default_state",
             "estimate",
-            "is_time_tracking_enabled",
+            "modules",
+            "cycles",
+            "views",
+            "pages",
+            "intakes",
             "external_source",
             "external_id",
         ),
@@ -76,31 +87,13 @@ ACTIONS = (
     Action("delete", ("project_id",), destructive=True),
     Action("archive", ("project_id",)),
     Action("unarchive", ("project_id",)),
-    Action("worklog_summary", ("project_id",), read=True),
-    Action("get_features", ("project_id",), read=True),
-    Action(
-        "update_features",
-        ("project_id",),
-        (
-            "modules",
-            "cycles",
-            "views",
-            "pages",
-            "intakes",
-            "workitem_types",
-            "epics",
-            "parallel_cycles",
-            "project_updates",
-            "workflows",
-        ),
-        note="toggles project features on or off",
-    ),
 )
 
 FOOTER = (
     "identifier is the short work item prefix, such as ENG. network is 0 for secret or 2 for public. "
     "project_lead and default_assignee are member ids -- get them from `member list_workspace`. "
-    "Feature toggles are booleans; omitted ones are left as they are."
+    "modules, cycles, views, pages and intakes are feature toggles: booleans, and omitted ones are left as "
+    "they are. Cycles, modules and intake start disabled, so enable them before creating one."
 )
 
 LEGACY = {
@@ -109,8 +102,6 @@ LEGACY = {
     "create_project": "create",
     "update_project": "update",
     "delete_project": "delete",
-    "get_project_worklog_summary": "worklog_summary",
-    "update_project_features": "update_features",
 }
 
 LEGACY_UNMAPPED = {
@@ -124,7 +115,6 @@ def register(mcp: FastMCP) -> None:
         description=build_description("Projects in a workspace.", ACTIONS, FOOTER),
         annotations=build_annotations(TITLE, ACTIONS),
     )
-    @plan_gated("This project feature")
     def project(
         action: Literal[
             "list",
@@ -134,9 +124,6 @@ def register(mcp: FastMCP) -> None:
             "delete",
             "archive",
             "unarchive",
-            "worklog_summary",
-            "get_features",
-            "update_features",
         ],
         project_id: str = "",
         name: str = "",
@@ -162,24 +149,10 @@ def register(mcp: FastMCP) -> None:
         views: bool | None = None,
         pages: bool | None = None,
         intakes: bool | None = None,
-        workitem_types: bool | None = None,
-        epics: bool | None = None,
-        parallel_cycles: bool | None = None,
-        project_updates: bool | None = None,
-        workflows: bool | None = None,
-        is_time_tracking_enabled: bool | None = None,
         cursor: str = "",
         per_page: int = 0,
         order_by: str = "",
-    ) -> (
-        Project
-        | PaginatedProjectLiteResponse
-        | PaginatedProjectMemberResponse
-        | ProjectFeature
-        | list[ProjectWorklogSummary]
-        | str
-        | None
-    ):
+    ) -> Project | PaginatedProjectLiteResponse | PaginatedProjectMemberResponse | str | None:
         client, workspace_slug = get_plane_client_context()
 
         if timezone and timezone not in TIMEZONES:
@@ -223,7 +196,6 @@ def register(mcp: FastMCP) -> None:
                     timezone=zone,
                     external_source=opt(external_source),
                     external_id=opt(external_id),
-                    is_issue_type_enabled=workitem_types,
                 ),
             )
 
@@ -257,8 +229,6 @@ def register(mcp: FastMCP) -> None:
                     timezone=zone,
                     external_source=opt(external_source),
                     external_id=opt(external_id),
-                    is_issue_type_enabled=workitem_types,
-                    is_time_tracking_enabled=is_time_tracking_enabled,
                     default_state=opt(default_state),
                     estimate=opt(estimate),
                 ),
@@ -272,29 +242,5 @@ def register(mcp: FastMCP) -> None:
             client.projects.archive(workspace_slug=workspace_slug, project_id=project_id)
             return None
 
-        if action == "unarchive":
-            client.projects.unarchive(workspace_slug=workspace_slug, project_id=project_id)
-            return None
-
-        if action == "worklog_summary":
-            return client.projects.get_worklog_summary(workspace_slug=workspace_slug, project_id=project_id)
-
-        if action == "get_features":
-            return client.projects.get_features(workspace_slug=workspace_slug, project_id=project_id)
-
-        return client.projects.update_features(
-            workspace_slug=workspace_slug,
-            project_id=project_id,
-            data=ProjectFeature(
-                modules=modules,
-                cycles=cycles,
-                views=views,
-                pages=pages,
-                intakes=intakes,
-                work_item_types=workitem_types,
-                epics=epics,
-                parallel_cycles=parallel_cycles,
-                project_updates=project_updates,
-                workflows=workflows,
-            ),
-        )
+        client.projects.unarchive(workspace_slug=workspace_slug, project_id=project_id)
+        return None
